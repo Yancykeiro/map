@@ -46,6 +46,14 @@
 
         // 初始化地图
         function initMap() {
+            const startInput = document.getElementById("start");
+            const endInput = document.getElementById("end");
+            startInput.value = "上海市松江区泗泾镇三祥路188号";
+            endInput.value = "上海市杨浦区长阳路1687号";
+
+
+
+
             map = new BMapGL.Map("container");
             map.centerAndZoom(new BMapGL.Point(121.4737, 31.2304), 12);
             map.enableScrollWheelZoom(true);
@@ -102,8 +110,13 @@
             // map.clearOverlays();
 
             // 获取坐标
-            const start = await getCoordinate(document.getElementById("start").value);
-            const end = await getCoordinate(document.getElementById("end").value);
+            const startInput = document.getElementById("start");
+            const endInput = document.getElementById("end");
+            // startInput.value = startInput.value ? startInput.value : "上海市松江区泗泾镇三祥路188号";
+            // endInput.value = endInput.value ? endInput.value : "上海市杨浦区长阳路1687号";
+
+            const start = await getCoordinate(startInput.value);
+            const end = await getCoordinate(endInput.value);
 
             if (!start || !end) {
                 alert("请输入有效的地址");

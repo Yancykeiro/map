@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>百度地图路线规划</title>
+    <style>
+        #container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            left: 0;
+            top: 0;
+            background-color: rgb(32, 97, 97);
+        }
+
+        .input-box {
+            padding: 10px;
+            background: #fff;
+            position: absolute;
+            z-index: 999;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="input-box">
+        <input type="text" id="start" placeholder="起点">
+        <input type="text" id="end" placeholder="终点">
+        <button onclick="searchRoute()">搜索路线</button>
+        <div id="result"></div>
+    </div>
+    <div id="container"></div>
+
+    <script type="text/javascript"
+        src="//api.map.baidu.com/api?type=webgl&v=1.0&ak=3qasxm8edqtR2fNrYgq4Lv9ILXuVrxDd"></script>
+
+    <!-- 
+    <script type="text/javascript"
+        src="https://api.map.baidu.com/api?v=3.0&ak=3qasxm8edqtR2fNrYgq4Lv9ILXuVrxDd"></script> -->
+    <script>
+        let map = null;
+        let startPoint = null;
+        let endPoint = null;
+
+        // 初始化地图
+        function initMap() {
+            map = new BMapGL.Map("container");
+            map.centerAndZoom(new BMapGL.Point(121.4737, 31.2304), 12);
+            map.enableScrollWheelZoom(true);
+
+
+            // // 示例：搜索上海地铁1号线
+            // searchSubwayLine("上海地铁1号线");
+
+            // --- 添加行政区划 ---
+            const dist = new BMapGL.DistrictLayer({
+                name: '(上海市)',
+                kind: 1,
+                fillColor: '#618bf8',
+                fillOpacity: 1,
+                strokeColor: '#daeafa',
+                viewport: true
+            });
+            map.addDistrictLayer(dist);
+
+            // --- 行政区划添加鼠标事件 ---
+            dist.addEventListener('click', function (e) {
+                e.currentTarget.setFillColor('#9169db');
+            });
+            // dist.addEventListener('mouseout', function (e) {
+            //     e.currentTarget.setFillColor(e.currentTarget.style.fillColor);
+            // });
+
+        }
+
+        function searchSubwayLine(lineName) {
+            const localSearch = new BMapGL.LocalSearch(map, {
+                onSearchComplete: result => {
+                    console.log(result);
+                    if (result.getCurrentNumPois() > 0) {
+                        const pois = result.getPois(); // 获取搜索结果
+                        pois.forEach(poi => {
+                            console.log(poi.title, poi.point); // 打印站点名称和坐标
+                        });
+                    } else {
+                        console.log("未找到相关地铁线路");
+                    }
+                }
+            });
+            localSearch.search(lineName); // 搜索地铁线路名称
+        }
+
+
+
+
+
+        // 路线搜索主函数
+        async function searchRoute() {
+            // // 清空上次结果
+            // map.clearOverlays();
+
+            // 获取坐标
+            const start = await getCoordinate(document.getElementById("start").value);
+            const end = await getCoordinate(document.getElementById("end").value);
+
+            if (!start || !end) {
+                alert("请输入有效的地址");
+                return;
+            }
+
+            startPoint = new BMapGL.Point(start.lng, start.lat);
+            endPoint = new BMapGL.Point(end.lng, end.lat);
+
+            // 显示标记和连线
+            // addMarkers();
+            drawLine();
+            drawPerpendicularBisector();
+
+            // 显示行政区划
+            // showBoundaries();
+
+            // 显示路线方案
+            showDrivingRoute();
+            // markSubwayStations();
+            showTransitRoute();
+
+
+
+
+        }
+
+        // 地址转坐标
+        function getCoordinate(address) {
+            //创建地址解析器实例
+            const myGeo = new BMapGL.Geocoder();
+            return new Promise(resolve => {
+                // 将地址解析结果显示在地图上，并调整地图视野
+                myGeo.getPoint(address, (point) => {
+                    if (point) {
+                        resolve({ lng: point.lng, lat: point.lat });
+                        // map.centerAndZoom(point, 16);
+                        map.addOverlay(new BMapGL.Marker(point, { title: address }));
+                    }
+                });
+
+            });
+        }
+
+        // 添加标记
+        function addMarkers() {
+            new BMapGL.Marker(startPoint).addTo(map);
+            new BMapGL.Marker(endPoint).addTo(map);
+        }
+
+        // 绘制连线
+        function drawLine() {
+            const polyline = new BMapGL.Polyline([startPoint, endPoint], {
+                strokeColor: "#ff0000",
+                strokeWeight: 3
+            });
+            map.addOverlay(polyline);
+            map.setViewport([startPoint, endPoint]);
+        }
+
+        // 显示行政区划
+        function showBoundaries() {
+            const bd = new BMapGL.Boundary();
+            bd.get("省/市/区名称", rs => {
+                const count = rs.boundaries.length;
+                for (let i = 0; i < count; i++) {
+                    const ply = new BMapGL.Polygon(rs.boundaries[i], {
+                        strokeColor: "#0000ff",
+                        fillColor: ""
+                    });
+                    map.addOverlay(ply);
+                }
+            });
+        }
+
+        // 显示驾车路线
+        function showDrivingRoute() {
+            const driving = new BMapGL.DrivingRoute(map, {
+                renderOptions: { map: map, autoViewport: true },
+                onSearchComplete: result => {
+                    console.log(result, driving.getStatus());
+                    // if (driving.getStatus() === BMap_STATUS_SUCCESS) {
+                    // const plan = result.getPlan(0);
+                    // document.getElementById("result").innerHTML +=
+                    //     `<h3>驾车方案：</h3>
+                    //         <p>${plan.getDescription()}</p>`;
+                    // }
+                }
+            });
+            driving.search(startPoint, endPoint);
+        }
+
+
+        // 显示公交/地铁路线
+        function showTransitRoute() {
+            const transit = new BMapGL.TransitRoute(map, {
+                renderOptions: { map: map, autoViewport: true },
+                onSearchComplete: result => {
+                    console.log(result);
+
+                    // const busline = new BMapGL.BusLineSearch(map, {
+                    //     renderOptions: { map: map, panel: "r-result" },
+                    //     onGetBusListComplete: function (result) {
+                    //         // console.log(result);
+                    //         // if (result) {
+                    //         //     const fstLine = result.getBusListItem(0);//获取第一个公交列表显示到map上
+                    //         //     busline.getBusLine(fstLine);
+                    //         // }
+                    //     }
+                    // });
+
+
+                    // result._plans.forEach(plan => {
+                    //     plan._lines.forEach(line => {
+                    //         console.log(line.title);
+                    //         busline.getBusList(line.title);
+                    //         line._stops.forEach(p => {
+                    //             console.log(p.title);
+                    //         });
+                    //     });
+                    // });
+
+
+
+
+
+                    // // reslut有所有方案，line里有线路，
+                    // if (transit.getStatus() === BMAP_STATUS_SUCCESS) {
+                    //     const plan = result.getPlan(4);
+                    //     console.log(plan);
+                    //     document.getElementById("result").innerHTML +=
+                    //         `<h3>公交方案：</h3>
+                    //         <p>${plan.getDescription()}</p>`;
+                    // }
+                }
+            });
+            transit.search(startPoint, endPoint);
+
+            // transit.setMarkersSetCallback((a, b) => {
+            //     console.log("yy", a, b);
+            //     // b得到七点终点换乘点
+            //     // 再查公交线路得到所有站点坐标，再标记
+            // });
+
+
+
+        }
+
+
+        // 标注路径经过的地铁站
+        function markSubwayStations() {
+            const transit = new BMapGL.TransitRoute(map, {
+                renderOptions: { map: map },
+                onSearchComplete: function (results) {
+                    if (transit.getStatus() != BMAP_STATUS_SUCCESS) {
+                        return;
+                    }
+                    var plan = results.getPlan(0);
+                    output += '总时长：' + plan.getDuration(true);  //获取时间
+                    output += '总路程：' + plan.getDistance(true);  //获取距离
+                    $('#result').css('display', 'block');
+                    $('#result').html(output);
+                },
+            });
+
+
+
+            const threshold = 500; // 距离阈值（单位：米）
+            subwayStations.forEach(station => {
+                const stationPoint = new BMap.Point(station.lng, station.lat);
+                const distance = getDistanceToLine(stationPoint, startPoint, endPoint);
+                if (distance <= threshold) {
+                    const marker = new BMap.Marker(stationPoint);
+                    map.addOverlay(marker);
+                    marker.setLabel(new BMap.Label(station.name, { offset: new BMap.Size(20, -10) }));
+                }
+            });
+        }
+
+
+        // 画中垂线
+        function drawPerpendicularBisector() {
+            // 计算中点
+            const midPoint = new BMapGL.Point(
+                (startPoint.lng + endPoint.lng) / 2,
+                (startPoint.lat + endPoint.lat) / 2
+            );
+
+
+            // 计算斜率
+            const slope = (endPoint.lat - startPoint.lat) / (endPoint.lng - startPoint.lng);
+            const perpendicularSlope = -1 / slope;
+
+            // 计算中垂线的两个端点
+            const length = 0.1; // 中垂线长度
+            const dx = length / Math.sqrt(1 + perpendicularSlope * perpendicularSlope);
+            const dy = perpendicularSlope * dx;
+
+            const point1 = new BMapGL.Point(midPoint.lng + dx, midPoint.lat + dy);
+            const point2 = new BMapGL.Point(midPoint.lng - dx, midPoint.lat - dy);
+
+            // 绘制中垂线
+            const perpendicularLine = new BMapGL.Polyline([point1, point2], {
+                strokeColor: "#0000ff",
+                strokeWeight: 2
+            });
+            map.addOverlay(perpendicularLine);
+
+
+            const circle = new BMapGL.Circle(midPoint, 1000, { fillColor: "yellow", strokeWeight: 1, fillOpacity: 0.3, strokeOpacity: 0.3 });
+            map.addOverlay(circle);
+            const local = new BMapGL.LocalSearch(map, { renderOptions: { map: map, autoViewport: false } });
+            local.searchNearby('小区', midPoint, 1000);
+        }
+
+        // 初始化
+        window.onload = initMap;
+    </script>
+</body>
+
+</html>
